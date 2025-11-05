@@ -1,0 +1,82 @@
+{
+  "name": "Document",
+  "type": "object",
+  "properties": {
+    "application_id": {
+      "type": "string",
+      "description": "Related application ID"
+    },
+    "document_type": {
+      "type": "string",
+      "enum": [
+        "id_copy",
+        "proof_of_residence",
+        "birth_certificate",
+        "marriage_certificate",
+        "death_certificate",
+        "passport_photo",
+        "proof_of_income",
+        "bank_statement",
+        "affidavit",
+        "police_clearance",
+        "medical_certificate",
+        "academic_records",
+        "business_plan",
+        "tax_clearance",
+        "other"
+      ],
+      "description": "Type of document"
+    },
+    "file_url": {
+      "type": "string",
+      "description": "URL to uploaded document"
+    },
+    "file_name": {
+      "type": "string",
+      "description": "Original file name"
+    },
+    "file_size": {
+      "type": "number",
+      "description": "File size in bytes"
+    },
+    "verification_status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "verified",
+        "rejected",
+        "expired"
+      ],
+      "default": "pending",
+      "description": "Document verification status"
+    },
+    "verified_by": {
+      "type": "string",
+      "description": "Email of official who verified"
+    },
+    "verification_date": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Date document was verified"
+    },
+    "rejection_reason": {
+      "type": "string",
+      "description": "Reason if document was rejected"
+    },
+    "expiry_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Document expiry date if applicable"
+    },
+    "digital_signature": {
+      "type": "string",
+      "description": "Digital signature hash"
+    }
+  },
+  "required": [
+    "application_id",
+    "document_type",
+    "file_url",
+    "file_name"
+  ]
+}
