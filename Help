@@ -1,0 +1,241 @@
+import React, { useState } from "react";
+import { base44 } from "@/api/base44Client";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { Search, ThumbsUp, ThumbsDown, HelpCircle, MessageSquare } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { createPageUrl } from "@/utils";
+import { toast } from "sonner";
+
+const CATEGORIES = [
+  { id: "all", label: "All Topics" },
+  { id: "general", label: "General" },
+  { id: "applications", label: "Applications" },
+  { id: "documents", label: "Documents" },
+  { id: "appointments", label: "Appointments" },
+  { id: "payments", label: "Payments" },
+  { id: "account", label: "Account" },
+  { id: "technical", label: "Technical" },
+  { id: "id_services", label: "ID Services" },
+  { id: "social_services", label: "Social Services" },
+  { id: "business_services", label: "Business Services" },
+];
+
+export default function Help() {
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+
+  const { data: faqs = [], isLoading } = useQuery({
+    queryKey: ['faqs'],
+    queryFn: () => base44.entities.FAQ.filter({ is_active: true }),
+    initialData: [],
+  });
+
+  const voteHelpfulMutation = useMutation({
+    mutationFn: async ({ faqId, isHelpful }) => {
+      const faq = faqs.find(f => f.id === faqId);
+      
+      if (isHelpful) {
+        await base44.entities.FAQ.update(faqId, {
+          helpful_count: (faq.helpful_count || 0) + 1,
+          view_count: (faq.view_count || 0) + 1,
+        });
+      } else {
+        await base44.entities.FAQ.update(faqId, {
+          not_helpful_count: (faq.not_helpful_count || 0) + 1,
+          view_count: (faq.view_count || 0) + 1,
+        });
+      }
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['faqs'] });
+      toast.success(variables.isHelpful ? "Thanks for your feedback!" : "We'll work on improving this answer");
+    },
+  });
+
+  const filteredFaqs = faqs.filter(faq => {
+    const matchesSearch = 
+      faq.question?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      faq.answer?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      faq.keywords?.some(k => k.toLowerCase().includes(searchQuery.toLowerCase()));
+    
+    const matchesCategory = categoryFilter === "all" || faq.category === categoryFilter;
+    
+    return matchesSearch && matchesCategory;
+  });
+
+  // Group FAQs by category
+  const groupedFaqs = filteredFaqs.reduce((acc, faq) => {
+    const category = faq.category || 'general';
+    if (!acc[category]) {
+      acc[category] = [];
+    }
+    acc[category].push(faq);
+    return acc;
+  }, {});
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin h-12 w-12 border-4 border-[#007749] border-t-transparent rounded-full"></div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-4 md:p-8 bg-[#FAFAF9] min-h-screen">
+      <div className="max-w-5xl mx-auto">
+        <div className="text-center mb-8">
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#007749] to-[#001489] flex items-center justify-center mx-auto mb-4">
+            <HelpCircle className="w-8 h-8 text-white" />
+          </div>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Help Center</h1>
+          <p className="text-gray-600">Find answers to frequently asked questions</p>
+        </div>
+
+        {/* Search */}
+        <Card className="mb-6 border-none shadow-lg">
+          <CardContent className="p-6">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <Input
+                type="text"
+                placeholder="Search for help..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10 h-12 text-base"
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Categories */}
+        <div className="flex flex-wrap gap-2 mb-8">
+          {CATEGORIES.map((category) => (
+            <Badge
+              key={category.id}
+              variant={categoryFilter === category.id ? "default" : "outline"}
+              className={`px-4 py-2 cursor-pointer transition-all ${
+                categoryFilter === category.id
+                  ? 'bg-[#007749] hover:bg-[#005a38] text-white'
+                  : 'hover:bg-gray-100'
+              }`}
+              onClick={() => setCategoryFilter(category.id)}
+            >
+              {category.label}
+            </Badge>
+          ))}
+        </div>
+
+        {/* FAQs */}
+        {filteredFaqs.length === 0 ? (
+          <Card className="border-none shadow-md">
+            <CardContent className="p-12 text-center">
+              <Search className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">No results found</h3>
+              <p className="text-gray-600 mb-6">
+                Try different keywords or browse all topics
+              </p>
+              <Button 
+                variant="outline"
+                onClick={() => {
+                  setSearchQuery("");
+                  setCategoryFilter("all");
+                }}
+              >
+                Clear Filters
+              </Button>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-6">
+            {Object.entries(groupedFaqs).map(([category, categoryFaqs]) => {
+              const categoryInfo = CATEGORIES.find(c => c.id === category);
+              
+              return (
+                <Card key={category} className="border-none shadow-md">
+                  <CardHeader className="bg-gradient-to-r from-[#007749]/5 to-[#FFB81C]/5 border-b">
+                    <CardTitle className="flex items-center justify-between">
+                      <span className="capitalize">{categoryInfo?.label || category}</span>
+                      <Badge variant="outline">{categoryFaqs.length} questions</Badge>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    <Accordion type="single" collapsible className="w-full">
+                      {categoryFaqs.map((faq, index) => (
+                        <AccordionItem key={faq.id} value={`item-${faq.id}`} className="border-b last:border-0">
+                          <AccordionTrigger className="px-6 py-4 hover:bg-gray-50 text-left">
+                            <span className="font-medium text-gray-900">{faq.question}</span>
+                          </AccordionTrigger>
+                          <AccordionContent className="px-6 pb-4">
+                            <p className="text-gray-700 mb-4 whitespace-pre-wrap">{faq.answer}</p>
+                            
+                            <div className="flex items-center justify-between pt-4 border-t">
+                              <div className="flex items-center gap-4">
+                                <span className="text-sm text-gray-600">Was this helpful?</span>
+                                <div className="flex gap-2">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => voteHelpfulMutation.mutate({ faqId: faq.id, isHelpful: true })}
+                                    className="gap-1"
+                                  >
+                                    <ThumbsUp className="w-3 h-3" />
+                                    Yes {faq.helpful_count > 0 && `(${faq.helpful_count})`}
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => voteHelpfulMutation.mutate({ faqId: faq.id, isHelpful: false })}
+                                    className="gap-1"
+                                  >
+                                    <ThumbsDown className="w-3 h-3" />
+                                    No {faq.not_helpful_count > 0 && `(${faq.not_helpful_count})`}
+                                  </Button>
+                                </div>
+                              </div>
+                              
+                              {faq.view_count > 0 && (
+                                <span className="text-xs text-gray-500">
+                                  {faq.view_count} views
+                                </span>
+                              )}
+                            </div>
+                          </AccordionContent>
+                        </AccordionItem>
+                      ))}
+                    </Accordion>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Contact Support */}
+        <Card className="mt-8 border-2 border-[#007749]/20 bg-gradient-to-r from-[#007749]/5 to-[#FFB81C]/5">
+          <CardContent className="p-8 text-center">
+            <MessageSquare className="w-12 h-12 text-[#007749] mx-auto mb-4" />
+            <h3 className="text-2xl font-bold text-gray-900 mb-2">Still need help?</h3>
+            <p className="text-gray-600 mb-6">
+              Our support team is here to assist you with any questions
+            </p>
+            <Button 
+              onClick={() => navigate(createPageUrl("Messages"))}
+              className="bg-[#007749] hover:bg-[#005a38] gap-2"
+            >
+              <MessageSquare className="w-4 h-4" />
+              Contact Support
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
