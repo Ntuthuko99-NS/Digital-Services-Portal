@@ -1,0 +1,147 @@
+{
+  "name": "Application",
+  "type": "object",
+  "properties": {
+    "application_number": {
+      "type": "string",
+      "description": "Unique application reference number"
+    },
+    "service_type": {
+      "type": "string",
+      "enum": [
+        "id_card",
+        "passport",
+        "drivers_license",
+        "birth_certificate",
+        "marriage_certificate",
+        "death_certificate",
+        "sassa_grant",
+        "nsfas",
+        "rdp_housing",
+        "business_registration",
+        "tax_registration",
+        "voter_registration"
+      ],
+      "description": "Type of government service"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "submitted",
+        "under_review",
+        "documents_pending",
+        "documents_verified",
+        "approved",
+        "rejected",
+        "appealed",
+        "cancelled"
+      ],
+      "default": "submitted",
+      "description": "Current application status"
+    },
+    "applicant_name": {
+      "type": "string",
+      "description": "Full name of applicant"
+    },
+    "id_number": {
+      "type": "string",
+      "description": "South African ID number"
+    },
+    "phone": {
+      "type": "string",
+      "description": "Contact phone number"
+    },
+    "email": {
+      "type": "string",
+      "description": "Contact email"
+    },
+    "province": {
+      "type": "string",
+      "enum": [
+        "gauteng",
+        "western_cape",
+        "eastern_cape",
+        "kwazulu_natal",
+        "free_state",
+        "limpopo",
+        "mpumalanga",
+        "north_west",
+        "northern_cape"
+      ],
+      "description": "South African province"
+    },
+    "city": {
+      "type": "string",
+      "description": "City or town"
+    },
+    "address": {
+      "type": "string",
+      "description": "Physical address"
+    },
+    "service_details": {
+      "type": "object",
+      "description": "Service-specific details as JSON",
+      "additionalProperties": true
+    },
+    "payment_required": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether payment is required"
+    },
+    "payment_amount": {
+      "type": "number",
+      "description": "Amount to be paid in ZAR"
+    },
+    "payment_status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "paid",
+        "failed",
+        "refunded"
+      ],
+      "default": "pending",
+      "description": "Payment status"
+    },
+    "assigned_to": {
+      "type": "string",
+      "description": "Email of assigned official"
+    },
+    "priority": {
+      "type": "string",
+      "enum": [
+        "low",
+        "medium",
+        "high",
+        "urgent"
+      ],
+      "default": "medium",
+      "description": "Application priority"
+    },
+    "submission_date": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Date application was submitted"
+    },
+    "processed_date": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Date application was processed"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Internal notes from officials"
+    },
+    "rejection_reason": {
+      "type": "string",
+      "description": "Reason for rejection if applicable"
+    }
+  },
+  "required": [
+    "service_type",
+    "applicant_name",
+    "id_number",
+    "phone"
+  ]
+}
