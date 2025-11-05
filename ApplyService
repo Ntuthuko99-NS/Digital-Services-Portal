@@ -1,0 +1,229 @@
+import React, { useState, useEffect } from "react";
+import { base44 } from "@/api/base44Client";
+import { useNavigate } from "react-router-dom";
+import { createPageUrl } from "@/utils";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
+import { Badge } from "@/components/ui/badge";
+import { ArrowRight, ArrowLeft, Check, Upload, X, FileText, AlertCircle } from "lucide-react";
+import { toast } from "sonner";
+
+const SERVICE_CONFIGS = {
+  id_card: {
+    name: "ID Card Application",
+    fields: ["reason_for_application", "previous_id_number"],
+    documents: ["proof_of_residence", "birth_certificate", "passport_photo"],
+    fee: 140,
+  },
+  passport: {
+    name: "Passport Application",
+    fields: ["passport_type", "previous_passport_number", "reason_for_application"],
+    documents: ["id_copy", "proof_of_residence", "passport_photo"],
+    fee: 400,
+  },
+  drivers_license: {
+    name: "Driver's License",
+    fields: ["license_type", "previous_license_number"],
+    documents: ["id_copy", "proof_of_residence", "medical_certificate", "passport_photo"],
+    fee: 250,
+  },
+  birth_certificate: {
+    name: "Birth Certificate",
+    fields: ["child_name", "birth_date", "hospital_name"],
+    documents: ["parents_id_copy", "hospital_birth_notification"],
+    fee: 0,
+  },
+  sassa_grant: {
+    name: "SASSA Grant",
+    fields: ["grant_type", "disability_type", "number_of_children"],
+    documents: ["id_copy", "proof_of_income", "bank_statement", "medical_certificate"],
+    fee: 0,
+  },
+  nsfas: {
+    name: "NSFAS Application",
+    fields: ["institution_name", "course_name", "year_of_study"],
+    documents: ["id_copy", "academic_records", "proof_of_income"],
+    fee: 0,
+  },
+  rdp_housing: {
+    name: "RDP Housing",
+    fields: ["household_size", "monthly_income", "current_living_situation"],
+    documents: ["id_copy", "proof_of_income", "affidavit"],
+    fee: 0,
+  },
+  business_registration: {
+    name: "Business Registration",
+    fields: ["business_name", "business_type", "number_of_directors"],
+    documents: ["id_copy", "proof_of_residence", "business_plan"],
+    fee: 175,
+  },
+};
+
+export default function ApplyService() {
+  const navigate = useNavigate();
+  const [step, setStep] = useState(1);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [serviceType, setServiceType] = useState("");
+  const [user, setUser] = useState(null);
+  const [uploadingFiles, setUploadingFiles] = useState({});
+  
+  const [formData, setFormData] = useState({
+    // Step 1 - Personal (auto-filled)
+    applicant_name: "",
+    id_number: "",
+    phone: "",
+    email: "",
+    province: "",
+    city: "",
+    address: "",
+    
+    // Step 2 - Service Details
+    service_details: {},
+    
+    // Step 3 - Documents
+    documents: [],
+  });
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const type = params.get('type');
+    if (!type || !SERVICE_CONFIGS[type]) {
+      navigate(createPageUrl("Services"));
+      return;
+    }
+    setServiceType(type);
+    loadUserData();
+  }, []);
+
+  const loadUserData = async () => {
+    try {
+      const userData = await base44.auth.me();
+      setUser(userData);
+      setFormData(prev => ({
+        ...prev,
+        applicant_name: userData.full_name || "",
+        id_number: userData.id_number || "",
+        phone: userData.phone || "",
+        email: userData.email || "",
+        province: userData.province || "",
+        city: userData.city || "",
+        address: userData.physical_address || "",
+      }));
+    } catch (error) {
+      console.error("Error loading user:", error);
+    }
+    setLoading(false);
+  };
+
+  const handleInputChange = (field, value) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleServiceDetailChange = (field, value) => {
+    setFormData(prev => ({
+      ...prev,
+      service_details: { ...prev.service_details, [field]: value }
+    }));
+  };
+
+  const handleFileUpload = async (docType, file) => {
+    setUploadingFiles(prev => ({ ...prev, [docType]: true }));
+    try {
+      const { file_url } = await base44.integrations.Core.UploadFile({ file });
+      
+      const newDoc = {
+        document_type: docType,
+        file_url,
+        file_name: file.name,
+        file_size: file.size,
+      };
+      
+      setFormData(prev => ({
+        ...prev,
+        documents: [...prev.documents.filter(d => d.document_type !== docType), newDoc]
+      }));
+      
+      toast.success(`${file.name} uploaded successfully`);
+    } catch (error) {
+      console.error("Upload error:", error);
+      toast.error("Failed to upload file");
+    }
+    setUploadingFiles(prev => ({ ...prev, [docType]: false }));
+  };
+
+  const removeDocument = (docType) => {
+    setFormData(prev => ({
+      ...prev,
+      documents: prev.documents.filter(d => d.document_type !== docType)
+    }));
+  };
+
+  const validateStep = () => {
+    if (step === 1) {
+      if (!formData.applicant_name || !formData.id_number || !formData.phone || !formData.email) {
+        toast.error("Please fill in all required fields");
+        return false;
+      }
+    }
+    return true;
+  };
+
+  const nextStep = () => {
+    if (validateStep()) {
+      setStep(prev => prev + 1);
+    }
+  };
+
+  const prevStep = () => {
+    setStep(prev => prev - 1);
+  };
+
+  const handleSubmit = async () => {
+    if (!validateStep()) return;
+    
+    const config = SERVICE_CONFIGS[serviceType];
+    const requiredDocs = config.documents || [];
+    const uploadedDocTypes = formData.documents.map(d => d.document_type);
+    const missingDocs = requiredDocs.filter(doc => !uploadedDocTypes.includes(doc));
+    
+    if (missingDocs.length > 0) {
+      toast.error("Please upload all required documents");
+      return;
+    }
+    
+    setSubmitting(true);
+    try {
+      // Generate application number
+      const appNumber = `APP${Date.now()}`;
+      
+      // Create application
+      const application = await base44.entities.Application.create({
+        application_number: appNumber,
+        service_type: serviceType,
+        status: config.fee > 0 ? 'draft' : 'submitted',
+        applicant_name: formData.applicant_name,
+        id_number: formData.id_number,
+        phone: formData.phone,
+        email: formData.email,
+        province: formData.province,
+        city: formData.city,
+        address: formData.address,
+        service_details: formData.service_details,
+        payment_required: config.fee > 0,
+        payment_amount: config.fee,
+        payment_status: config.fee > 0 ? 'pending' : 'paid',
+        submission_date: new Date().toISOString(),
+      });
+      
+      // Create document records
+      for (const doc of formData.documents) {
+        await base44.entities.Document.create({
+          application_id: application.id,
+          ...doc,
+ 
