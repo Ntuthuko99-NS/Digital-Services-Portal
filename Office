@@ -1,0 +1,82 @@
+{
+  "name": "Office",
+  "type": "object",
+  "properties": {
+    "office_name": {
+      "type": "string",
+      "description": "Name of government office"
+    },
+    "office_type": {
+      "type": "string",
+      "enum": [
+        "home_affairs",
+        "sassa",
+        "nsfas",
+        "housing",
+        "business_licensing",
+        "sars",
+        "municipal",
+        "provincial",
+        "multi_service"
+      ],
+      "description": "Type of government office"
+    },
+    "province": {
+      "type": "string",
+      "enum": [
+        "gauteng",
+        "western_cape",
+        "eastern_cape",
+        "kwazulu_natal",
+        "free_state",
+        "limpopo",
+        "mpumalanga",
+        "north_west",
+        "northern_cape"
+      ],
+      "description": "Province location"
+    },
+    "city": {
+      "type": "string",
+      "description": "City or town"
+    },
+    "address": {
+      "type": "string",
+      "description": "Physical address"
+    },
+    "postal_code": {
+      "type": "string",
+      "description": "Postal code"
+    },
+    "latitude": {
+      "type": "number",
+      "description": "GPS latitude"
+    },
+    "longitude": {
+      "type": "number",
+      "description": "GPS longitude"
+    },
+    "phone": {
+      "type": "string",
+      "description": "Contact phone number"
+    },
+    "email": {
+      "type": "string",
+      "description": "Contact email"
+    },
+    "services_offered": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "List of services offered at this office"
+    },
+    "operating_hours": {
+      "type": "object",
+      "description": "Operating hours by day",
+      "additionalProperties": true
+    },
+    "current_queue_length": {
+      "type": "number",
+      "default": 0,
+ 
