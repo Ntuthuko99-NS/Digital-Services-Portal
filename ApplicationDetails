@@ -1,0 +1,229 @@
+import React, { useState, useEffect } from "react";
+import { base44 } from "@/api/base44Client";
+import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
+import { createPageUrl } from "@/utils";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { 
+  ArrowLeft, FileText, Clock, CheckCircle, XCircle, AlertCircle, 
+  Download, MessageSquare, ExternalLink, Calendar
+} from "lucide-react";
+import { format } from "date-fns";
+
+const STATUS_CONFIG = {
+  draft: { label: "Draft", color: "bg-gray-100 text-gray-700", icon: Clock },
+  submitted: { label: "Submitted", color: "bg-blue-100 text-blue-700", icon: Clock },
+  under_review: { label: "Under Review", color: "bg-yellow-100 text-yellow-700", icon: Clock },
+  documents_pending: { label: "Documents Pending", color: "bg-orange-100 text-orange-700", icon: AlertCircle },
+  documents_verified: { label: "Documents Verified", color: "bg-purple-100 text-purple-700", icon: CheckCircle },
+  approved: { label: "Approved", color: "bg-green-100 text-green-700", icon: CheckCircle },
+  rejected: { label: "Rejected", color: "bg-red-100 text-red-700", icon: XCircle },
+  appealed: { label: "Appealed", color: "bg-indigo-100 text-indigo-700", icon: AlertCircle },
+  cancelled: { label: "Cancelled", color: "bg-gray-100 text-gray-700", icon: XCircle },
+};
+
+const SERVICE_LABELS = {
+  id_card: "ID Card",
+  passport: "Passport",
+  drivers_license: "Driver's License",
+  birth_certificate: "Birth Certificate",
+  marriage_certificate: "Marriage Certificate",
+  death_certificate: "Death Certificate",
+  sassa_grant: "SASSA Grant",
+  nsfas: "NSFAS",
+  rdp_housing: "RDP Housing",
+  business_registration: "Business Registration",
+  tax_registration: "Tax Registration",
+  voter_registration: "Voter Registration",
+};
+
+export default function ApplicationDetails() {
+  const navigate = useNavigate();
+  const [applicationId, setApplicationId] = useState("");
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get('id');
+    if (!id) {
+      navigate(createPageUrl("MyApplications"));
+      return;
+    }
+    setApplicationId(id);
+  }, []);
+
+  const { data: application, isLoading } = useQuery({
+    queryKey: ['application', applicationId],
+    queryFn: async () => {
+      const apps = await base44.entities.Application.filter({ id: applicationId });
+      return apps[0];
+    },
+    enabled: !!applicationId,
+  });
+
+  const { data: documents = [] } = useQuery({
+    queryKey: ['application-documents', applicationId],
+    queryFn: () => base44.entities.Document.filter({ application_id: applicationId }),
+    enabled: !!applicationId,
+    initialData: [],
+  });
+
+  const { data: auditLogs = [] } = useQuery({
+    queryKey: ['application-audit', applicationId],
+    queryFn: () => base44.entities.AuditLog.filter({ entity_id: applicationId }, '-created_date'),
+    enabled: !!applicationId,
+    initialData: [],
+  });
+
+  if (isLoading || !application) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin h-12 w-12 border-4 border-[#007749] border-t-transparent rounded-full"></div>
+      </div>
+    );
+  }
+
+  const statusInfo = STATUS_CONFIG[application.status] || STATUS_CONFIG.submitted;
+  const StatusIcon = statusInfo.icon;
+
+  return (
+    <div className="p-4 md:p-8 bg-[#FAFAF9] min-h-screen">
+      <div className="max-w-6xl mx-auto">
+        <Button
+          variant="outline"
+          onClick={() => navigate(createPageUrl("MyApplications"))}
+          className="mb-6"
+        >
+          <ArrowLeft className="w-4 h-4 mr-2" />
+          Back to Applications
+        </Button>
+
+        {/* Header Card */}
+        <Card className="mb-6 border-none shadow-lg">
+          <CardHeader className="bg-gradient-to-r from-[#007749]/10 to-[#FFB81C]/10 border-b">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#007749] to-[#001489] flex items-center justify-center">
+                    <FileText className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <h1 className="text-2xl font-bold text-gray-900">
+                      {SERVICE_LABELS[application.service_type]}
+                    </h1>
+                    <p className="text-sm text-gray-600 font-mono">{application.application_number}</p>
+                  </div>
+                </div>
+              </div>
+              
+              <Badge className={`${statusInfo.color} text-lg px-4 py-2 flex items-center gap-2 border-0 w-fit`}>
+                <StatusIcon className="w-5 h-5" />
+                {statusInfo.label}
+              </Badge>
+            </div>
+          </CardHeader>
+
+          <CardContent className="p-6">
+            <div className="grid md:grid-cols-3 gap-6">
+              <div>
+                <p className="text-sm text-gray-500 mb-1">Submitted On</p>
+                <p className="font-semibold text-gray-900">
+                  {format(new Date(application.submission_date || application.created_date), 'MMMM d, yyyy')}
+                </p>
+                <p className="text-xs text-gray-500">
+                  {format(new Date(application.submission_date || application.created_date), 'h:mm a')}
+                </p>
+              </div>
+
+              <div>
+                <p className="text-sm text-gray-500 mb-1">Applicant</p>
+                <p className="font-semibold text-gray-900">{application.applicant_name}</p>
+                <p className="text-xs text-gray-500">{application.id_number}</p>
+              </div>
+
+              <div>
+                <p className="text-sm text-gray-500 mb-1">Location</p>
+                <p className="font-semibold text-gray-900 capitalize">{application.city}</p>
+                <p className="text-xs text-gray-500 capitalize">
+                  {application.province?.replace(/_/g, ' ')}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Main Content Tabs */}
+        <Tabs defaultValue="overview" className="space-y-6">
+          <TabsList className="bg-white border shadow-sm">
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="documents">Documents ({documents.length})</TabsTrigger>
+            <TabsTrigger value="timeline">Timeline</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="overview" className="space-y-6">
+            <div className="grid md:grid-cols-2 gap-6">
+              {/* Application Details */}
+              <Card className="border-none shadow-md">
+                <CardHeader className="border-b bg-white/50">
+                  <CardTitle className="text-lg">Application Details</CardTitle>
+                </CardHeader>
+                <CardContent className="p-6 space-y-4">
+                  <div>
+                    <p className="text-sm text-gray-500">Service Type</p>
+                    <p className="font-semibold text-gray-900">
+                      {SERVICE_LABELS[application.service_type]}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-sm text-gray-500">Application Number</p>
+                    <p className="font-mono font-semibold text-gray-900">{application.application_number}</p>
+                  </div>
+
+                  <div>
+                    <p className="text-sm text-gray-500">Current Status</p>
+                    <Badge className={`${statusInfo.color} mt-1 border-0`}>
+                      {statusInfo.label}
+                    </Badge>
+                  </div>
+
+                  <div>
+                    <p className="text-sm text-gray-500">Priority</p>
+                    <p className="font-semibold text-gray-900 capitalize">
+                      {application.priority || 'Medium'}
+                    </p>
+                  </div>
+
+                  {application.assigned_to && (
+                    <div>
+                      <p className="text-sm text-gray-500">Assigned To</p>
+                      <p className="font-semibold text-gray-900">{application.assigned_to}</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Contact Information */}
+              <Card className="border-none shadow-md">
+                <CardHeader className="border-b bg-white/50">
+                  <CardTitle className="text-lg">Contact Information</CardTitle>
+                </CardHeader>
+                <CardContent className="p-6 space-y-4">
+                  <div>
+                    <p className="text-sm text-gray-500">Full Name</p>
+                    <p className="font-semibold text-gray-900">{application.applicant_name}</p>
+                  </div>
+
+                  <div>
+                    <p className="text-sm text-gray-500">ID Number</p>
+                    <p className="font-semibold text-gray-900">{application.id_number}</p>
+                  </div>
+
+                  <div>
+                    <p className="text-sm text-gray-500">Phone</p>
+                    <p className="font-semibold text-gray-900">{application.phone}</p>
+                  </div>
+
+ 
