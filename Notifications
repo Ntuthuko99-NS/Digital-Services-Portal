@@ -1,0 +1,241 @@
+import React, { useState } from "react";
+import { base44 } from "@/api/base44Client";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Bell, Check, CheckCheck, Trash2, FileText, Calendar, MessageSquare, CreditCard } from "lucide-react";
+import { format } from "date-fns";
+import { toast } from "sonner";
+import { useNavigate } from "react-router-dom";
+import { createPageUrl } from "@/utils";
+
+const NOTIFICATION_ICONS = {
+  application_submitted: FileText,
+  application_approved: CheckCheck,
+  application_rejected: FileText,
+  documents_required: FileText,
+  documents_verified: Check,
+  appointment_scheduled: Calendar,
+  appointment_reminder: Calendar,
+  appointment_cancelled: Calendar,
+  message_received: MessageSquare,
+  payment_received: CreditCard,
+  status_update: Bell,
+};
+
+export default function Notifications() {
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const [user, setUser] = useState(null);
+  const [filter, setFilter] = useState("all");
+
+  React.useEffect(() => {
+    loadUser();
+  }, []);
+
+  const loadUser = async () => {
+    const userData = await base44.auth.me();
+    setUser(userData);
+  };
+
+  const { data: notifications = [], isLoading } = useQuery({
+    queryKey: ['my-notifications'],
+    queryFn: async () => {
+      const user = await base44.auth.me();
+      return base44.entities.Notification.filter({ user_email: user.email }, '-created_date');
+    },
+    enabled: !!user,
+    initialData: [],
+  });
+
+  const markAsReadMutation = useMutation({
+    mutationFn: (notificationId) => {
+      return base44.entities.Notification.update(notificationId, {
+        is_read: true,
+        read_date: new Date().toISOString(),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['my-notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['unread-notifications'] });
+    },
+  });
+
+  const markAllAsReadMutation = useMutation({
+    mutationFn: async () => {
+      const unreadNotifs = notifications.filter(n => !n.is_read);
+      await Promise.all(
+        unreadNotifs.map(n => 
+          base44.entities.Notification.update(n.id, {
+            is_read: true,
+            read_date: new Date().toISOString(),
+          })
+        )
+      );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['my-notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['unread-notifications'] });
+      toast.success("All notifications marked as read");
+    },
+  });
+
+  const handleNotificationClick = (notification) => {
+    if (!notification.is_read) {
+      markAsReadMutation.mutate(notification.id);
+    }
+
+    // Navigate based on related type
+    if (notification.action_url) {
+      navigate(notification.action_url);
+    } else if (notification.related_type === 'application' && notification.related_id) {
+      navigate(createPageUrl("ApplicationDetails") + `?id=${notification.related_id}`);
+    } else if (notification.related_type === 'appointment' && notification.related_id) {
+      navigate(createPageUrl("Appointments"));
+    } else if (notification.related_type === 'message' && notification.related_id) {
+      navigate(createPageUrl("Messages"));
+    }
+  };
+
+  const filteredNotifications = notifications.filter(n => {
+    if (filter === "unread") return !n.is_read;
+    if (filter === "read") return n.is_read;
+    return true;
+  });
+
+  const unreadCount = notifications.filter(n => !n.is_read).length;
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin h-12 w-12 border-4 border-[#007749] border-t-transparent rounded-full"></div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-4 md:p-8 bg-[#FAFAF9] min-h-screen">
+      <div className="max-w-4xl mx-auto">
+        <div className="flex justify-between items-start mb-8">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Notifications</h1>
+            <p className="text-gray-600">Stay updated on your applications and services</p>
+          </div>
+          
+          {unreadCount > 0 && (
+            <Button
+              variant="outline"
+              onClick={() => markAllAsReadMutation.mutate()}
+              disabled={markAllAsReadMutation.isPending}
+              className="gap-2"
+            >
+              <CheckCheck className="w-4 h-4" />
+              Mark All Read
+            </Button>
+          )}
+        </div>
+
+        {/* Stats */}
+        <div className="grid grid-cols-3 gap-4 mb-6">
+          <Card className="border-none shadow-md">
+            <CardContent className="p-4">
+              <p className="text-sm text-gray-500 mb-1">Total</p>
+              <p className="text-2xl font-bold text-gray-900">{notifications.length}</p>
+            </CardContent>
+          </Card>
+          <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-none shadow-md">
+            <CardContent className="p-4">
+              <p className="text-sm text-blue-700 mb-1">Unread</p>
+              <p className="text-2xl font-bold text-blue-900">{unreadCount}</p>
+            </CardContent>
+          </Card>
+          <Card className="border-none shadow-md">
+            <CardContent className="p-4">
+              <p className="text-sm text-gray-500 mb-1">Read</p>
+              <p className="text-2xl font-bold text-gray-900">{notifications.length - unreadCount}</p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Filter */}
+        <Card className="mb-6 border-none shadow-md">
+          <CardContent className="p-4">
+            <div className="flex gap-2">
+              <Button
+                variant={filter === "all" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setFilter("all")}
+                className={filter === "all" ? "bg-[#007749] hover:bg-[#005a38]" : ""}
+              >
+                All
+              </Button>
+              <Button
+                variant={filter === "unread" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setFilter("unread")}
+                className={filter === "unread" ? "bg-[#007749] hover:bg-[#005a38]" : ""}
+              >
+                Unread ({unreadCount})
+              </Button>
+              <Button
+                variant={filter === "read" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setFilter("read")}
+                className={filter === "read" ? "bg-[#007749] hover:bg-[#005a38]" : ""}
+              >
+                Read
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Notifications List */}
+        {filteredNotifications.length === 0 ? (
+          <Card className="border-none shadow-md">
+            <CardContent className="p-12 text-center">
+              <Bell className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">No notifications</h3>
+              <p className="text-gray-600">
+                {filter === "unread" 
+                  ? "You're all caught up!"
+                  : "You'll see notifications here when there are updates"}
+              </p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-3">
+            {filteredNotifications.map((notification) => {
+              const Icon = NOTIFICATION_ICONS[notification.notification_type] || Bell;
+              
+              return (
+                <Card 
+                  key={notification.id}
+                  className={`border-none shadow-md hover:shadow-lg transition-all cursor-pointer ${
+                    !notification.is_read ? 'bg-blue-50 border-l-4 border-l-[#007749]' : ''
+                  }`}
+                  onClick={() => handleNotificationClick(notification)}
+                >
+                  <CardContent className="p-4">
+                    <div className="flex items-start gap-4">
+                      <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                        !notification.is_read 
+                          ? 'bg-gradient-to-br from-[#007749] to-[#001489]' 
+                          : 'bg-gray-100'
+                      }`}>
+                        <Icon className={`w-6 h-6 ${!notification.is_read ? 'text-white' : 'text-gray-400'}`} />
+                      </div>
+                      
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between gap-2 mb-1">
+                          <h3 className={`font-semibold ${!notification.is_read ? 'text-gray-900' : 'text-gray-700'}`}>
+                            {notification.title}
+                          </h3>
+                          {!notification.is_read && (
+                            <Badge className="bg-[#007749] text-white border-0 flex-shrink-0">
+                              New
+                            </Badge>
+                          )}
+                        </div>
+                        
+ 
