@@ -1,0 +1,229 @@
+import React, { useState, useEffect } from "react";
+import { base44 } from "@/api/base44Client";
+import { useNavigate } from "react-router-dom";
+import { createPageUrl } from "@/utils";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
+import { ArrowRight, ArrowLeft, Check, User, MapPin, Settings as SettingsIcon } from "lucide-react";
+import { toast } from "sonner";
+
+const PROVINCES = [
+  "gauteng", "western_cape", "eastern_cape", "kwazulu_natal",
+  "free_state", "limpopo", "mpumalanga", "north_west", "northern_cape"
+];
+
+const LANGUAGES = [
+  "english", "afrikaans", "zulu", "xhosa", "sotho",
+  "tswana", "pedi", "venda", "tsonga", "swati", "ndebele"
+];
+
+export default function ProfileCompletion() {
+  const navigate = useNavigate();
+  const [step, setStep] = useState(1);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [formData, setFormData] = useState({
+    // Step 1
+    id_number: "",
+    phone: "",
+    date_of_birth: "",
+    gender: "",
+    // Step 2
+    province: "",
+    city: "",
+    physical_address: "",
+    postal_code: "",
+    employment_status: "",
+    income_bracket: "",
+    // Step 3
+    preferred_language: "english",
+    notification_preferences: {
+      email: true,
+      sms: false,
+      whatsapp: false,
+      app: true
+    },
+    accessibility_settings: {
+      text_to_speech: false,
+      high_contrast: false,
+      large_text: false
+    },
+    two_factor_enabled: false
+  });
+
+  useEffect(() => {
+    checkProfileStatus();
+  }, []);
+
+  const checkProfileStatus = async () => {
+    try {
+      const user = await base44.auth.me();
+      if (user.profile_completed) {
+        navigate(createPageUrl("Dashboard"));
+        return;
+      }
+      // Pre-fill existing data
+      setFormData(prev => ({
+        ...prev,
+        id_number: user.id_number || "",
+        phone: user.phone || "",
+        date_of_birth: user.date_of_birth || "",
+        gender: user.gender || "",
+        province: user.province || "",
+        city: user.city || "",
+        physical_address: user.physical_address || "",
+        postal_code: user.postal_code || "",
+        employment_status: user.employment_status || "",
+        income_bracket: user.income_bracket || "",
+        preferred_language: user.preferred_language || "english",
+        notification_preferences: user.notification_preferences || formData.notification_preferences,
+        accessibility_settings: user.accessibility_settings || formData.accessibility_settings,
+        two_factor_enabled: user.two_factor_enabled || false
+      }));
+    } catch (error) {
+      console.error("Error checking profile:", error);
+    }
+    setLoading(false);
+  };
+
+  const handleInputChange = (field, value) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleNestedChange = (parent, field, value) => {
+    setFormData(prev => ({
+      ...prev,
+      [parent]: { ...prev[parent], [field]: value }
+    }));
+  };
+
+  const validateStep = () => {
+    if (step === 1) {
+      if (!formData.id_number || !formData.phone || !formData.date_of_birth || !formData.gender) {
+        toast.error("Please fill in all required fields");
+        return false;
+      }
+      // Basic SA ID validation (13 digits)
+      if (!/^\d{13}$/.test(formData.id_number)) {
+        toast.error("Please enter a valid 13-digit SA ID number");
+        return false;
+      }
+    } else if (step === 2) {
+      if (!formData.province || !formData.city || !formData.physical_address || !formData.employment_status || !formData.income_bracket) {
+        toast.error("Please fill in all required fields");
+        return false;
+      }
+    }
+    return true;
+  };
+
+  const nextStep = () => {
+    if (validateStep()) {
+      setStep(prev => prev + 1);
+    }
+  };
+
+  const prevStep = () => {
+    setStep(prev => prev - 1);
+  };
+
+  const handleSubmit = async () => {
+    if (!validateStep()) return;
+    
+    setSaving(true);
+    try {
+      await base44.auth.updateMe({
+        ...formData,
+        profile_completed: true
+      });
+      
+      toast.success("Profile completed successfully!");
+      navigate(createPageUrl("Dashboard"));
+    } catch (error) {
+      console.error("Error saving profile:", error);
+      toast.error("Failed to save profile. Please try again.");
+    }
+    setSaving(false);
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-[#FAFAF9]">
+        <div className="text-center">
+          <div className="animate-spin h-12 w-12 border-4 border-[#007749] border-t-transparent rounded-full mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  const progress = (step / 3) * 100;
+  const stepIcons = [User, MapPin, SettingsIcon];
+  const StepIcon = stepIcons[step - 1];
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-[#007749]/5 via-[#FFB81C]/5 to-[#E03C31]/5 p-4 md:p-8">
+      <div className="max-w-3xl mx-auto">
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center gap-2 bg-white px-4 py-2 rounded-full shadow-sm mb-4">
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#007749] via-[#FFB81C] to-[#E03C31] flex items-center justify-center">
+              <span className="text-white font-bold text-sm">SA</span>
+            </div>
+            <span className="font-semibold text-gray-900">eGov South Africa</span>
+          </div>
+          <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-2">Complete Your Profile</h1>
+          <p className="text-gray-600">Help us serve you better by completing your profile information</p>
+        </div>
+
+        {/* Progress Bar */}
+        <div className="mb-8">
+          <div className="flex justify-between mb-2">
+            <span className="text-sm font-medium text-gray-700">Step {step} of 3</span>
+            <span className="text-sm font-medium text-[#007749]">{Math.round(progress)}% Complete</span>
+          </div>
+          <Progress value={progress} className="h-2" />
+          <div className="flex justify-between mt-4">
+            <div className={`flex items-center gap-2 ${step >= 1 ? 'text-[#007749]' : 'text-gray-400'}`}>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step >= 1 ? 'bg-[#007749] text-white' : 'bg-gray-200'}`}>
+                {step > 1 ? <Check className="w-5 h-5" /> : '1'}
+              </div>
+              <span className="text-xs font-medium hidden md:inline">Personal</span>
+            </div>
+            <div className={`flex items-center gap-2 ${step >= 2 ? 'text-[#007749]' : 'text-gray-400'}`}>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step >= 2 ? 'bg-[#007749] text-white' : 'bg-gray-200'}`}>
+                {step > 2 ? <Check className="w-5 h-5" /> : '2'}
+              </div>
+              <span className="text-xs font-medium hidden md:inline">Location</span>
+            </div>
+            <div className={`flex items-center gap-2 ${step >= 3 ? 'text-[#007749]' : 'text-gray-400'}`}>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step >= 3 ? 'bg-[#007749] text-white' : 'bg-gray-200'}`}>
+                3
+              </div>
+              <span className="text-xs font-medium hidden md:inline">Preferences</span>
+            </div>
+          </div>
+        </div>
+
+        <Card className="shadow-xl border-none">
+          <CardHeader className="border-b bg-gradient-to-r from-[#007749]/5 to-[#FFB81C]/5">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#007749] to-[#001489] flex items-center justify-center">
+                <StepIcon className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <CardTitle className="text-2xl">
+                  {step === 1 && "Personal Information"}
+                  {step === 2 && "Location & Demographics"}
+                  {step === 3 && "Preferences & Settings"}
+                </CardTitle>
+                <CardDescription>
+                  {step === 1 && "Tell us about yourself"}
+                  {step === 2 && "Where are you located?"}
+                  {step === 3 && "Customize your experience"}
+                </CardDescription>
+ 
