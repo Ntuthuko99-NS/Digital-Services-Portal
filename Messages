@@ -1,0 +1,241 @@
+import React, { useState } from "react";
+import { base44 } from "@/api/base44Client";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
+import { MessageSquare, Send, Plus, Clock, CheckCheck } from "lucide-react";
+import { format } from "date-fns";
+import { toast } from "sonner";
+
+const STATUS_CONFIG = {
+  unread: { label: "Unread", color: "bg-blue-100 text-blue-700" },
+  read: { label: "Read", color: "bg-gray-100 text-gray-700" },
+  replied: { label: "Replied", color: "bg-green-100 text-green-700" },
+  closed: { label: "Closed", color: "bg-gray-100 text-gray-700" },
+};
+
+export default function Messages() {
+  const queryClient = useQueryClient();
+  const [user, setUser] = useState(null);
+  const [showNewMessageDialog, setShowNewMessageDialog] = useState(false);
+  const [selectedMessage, setSelectedMessage] = useState(null);
+  const [replyText, setReplyText] = useState("");
+  const [formData, setFormData] = useState({
+    subject: "",
+    message_body: "",
+    category: "general",
+  });
+
+  React.useEffect(() => {
+    loadUser();
+  }, []);
+
+  const loadUser = async () => {
+    const userData = await base44.auth.me();
+    setUser(userData);
+  };
+
+  const { data: messages = [], isLoading } = useQuery({
+    queryKey: ['my-messages'],
+    queryFn: async () => {
+      const user = await base44.auth.me();
+      const sent = await base44.entities.Message.filter({ sender_email: user.email }, '-created_date');
+      const received = await base44.entities.Message.filter({ recipient_email: user.email }, '-created_date');
+      return [...sent, ...received].sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
+    },
+    enabled: !!user,
+    initialData: [],
+  });
+
+  const sendMessageMutation = useMutation({
+    mutationFn: async (data) => {
+      const threadId = `THREAD-${Date.now()}`;
+      
+      const message = await base44.entities.Message.create({
+        ...data,
+        thread_id: threadId,
+        sender_email: user.email,
+        sender_role: 'citizen',
+        recipient_email: 'support@egov.gov.za',
+        recipient_role: 'support_agent',
+        status: 'unread',
+      });
+
+      // Create audit log
+      await base44.entities.AuditLog.create({
+        entity_type: 'message',
+        entity_id: message.id,
+        action: 'created',
+        user_email: user.email,
+        user_role: 'citizen',
+        description: `Message sent: ${data.subject}`,
+        timestamp: new Date().toISOString(),
+      });
+
+      // Create notification for support
+      await base44.entities.Notification.create({
+        user_email: 'support@egov.gov.za',
+        notification_type: 'message_received',
+        title: 'New Message Received',
+        message: `New message from ${user.full_name}: ${data.subject}`,
+        related_id: message.id,
+        related_type: 'message',
+        channels: ['app', 'email'],
+        sent_date: new Date().toISOString(),
+      });
+
+      return message;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['my-messages'] });
+      setShowNewMessageDialog(false);
+      setFormData({ subject: "", message_body: "", category: "general" });
+      toast.success("Message sent successfully!");
+    },
+    onError: () => {
+      toast.error("Failed to send message");
+    },
+  });
+
+  const replyMessageMutation = useMutation({
+    mutationFn: async ({ threadId, messageBody }) => {
+      const message = await base44.entities.Message.create({
+        thread_id: threadId,
+        subject: `Re: ${selectedMessage.subject}`,
+        message_body: messageBody,
+        sender_email: user.email,
+        sender_role: 'citizen',
+        recipient_email: selectedMessage.sender_email === user.email ? selectedMessage.recipient_email : selectedMessage.sender_email,
+        recipient_role: 'support_agent',
+        status: 'unread',
+        category: selectedMessage.category,
+      });
+
+      // Update original message status
+      await base44.entities.Message.update(selectedMessage.id, {
+        status: 'replied',
+      });
+
+      return message;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['my-messages'] });
+      setReplyText("");
+      setSelectedMessage(null);
+      toast.success("Reply sent!");
+    },
+  });
+
+  const markAsReadMutation = useMutation({
+    mutationFn: (messageId) => {
+      return base44.entities.Message.update(messageId, {
+        status: 'read',
+        read_date: new Date().toISOString(),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['my-messages'] });
+    },
+  });
+
+  const handleSendMessage = () => {
+    if (!formData.subject || !formData.message_body) {
+      toast.error("Please fill in all fields");
+      return;
+    }
+    sendMessageMutation.mutate(formData);
+  };
+
+  const handleReply = () => {
+    if (!replyText.trim()) {
+      toast.error("Please enter a reply");
+      return;
+    }
+    replyMessageMutation.mutate({
+      threadId: selectedMessage.thread_id,
+      messageBody: replyText,
+    });
+  };
+
+  const handleViewMessage = (message) => {
+    setSelectedMessage(message);
+    if (message.recipient_email === user?.email && message.status === 'unread') {
+      markAsReadMutation.mutate(message.id);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin h-12 w-12 border-4 border-[#007749] border-t-transparent rounded-full"></div>
+      </div>
+    );
+  }
+
+  const unreadCount = messages.filter(m => 
+    m.recipient_email === user?.email && m.status === 'unread'
+  ).length;
+
+  return (
+    <div className="p-4 md:p-8 bg-[#FAFAF9] min-h-screen">
+      <div className="max-w-6xl mx-auto">
+        <div className="flex justify-between items-start mb-8">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Messages</h1>
+            <p className="text-gray-600">Communicate with support team</p>
+          </div>
+          
+          <Dialog open={showNewMessageDialog} onOpenChange={setShowNewMessageDialog}>
+            <DialogTrigger asChild>
+              <Button className="bg-[#007749] hover:bg-[#005a38] gap-2">
+                <Plus className="w-4 h-4" />
+                New Message
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-lg">
+              <DialogHeader>
+                <DialogTitle>Send New Message</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 mt-4">
+                <div className="space-y-2">
+                  <Label>Category</Label>
+                  <Select value={formData.category} onValueChange={(value) => setFormData(prev => ({ ...prev, category: value }))}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="application_inquiry">Application Inquiry</SelectItem>
+                      <SelectItem value="document_issue">Document Issue</SelectItem>
+                      <SelectItem value="appointment_related">Appointment Related</SelectItem>
+                      <SelectItem value="payment_issue">Payment Issue</SelectItem>
+                      <SelectItem value="technical_support">Technical Support</SelectItem>
+                      <SelectItem value="complaint">Complaint</SelectItem>
+                      <SelectItem value="feedback">Feedback</SelectItem>
+                      <SelectItem value="general">General</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Subject</Label>
+                  <Input
+                    placeholder="Brief description of your message"
+                    value={formData.subject}
+                    onChange={(e) => setFormData(prev => ({ ...prev, subject: e.target.value }))}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Message</Label>
+                  <Textarea
+                    placeholder="Describe your issue or question in detail..."
+                    rows={6}
+                    value={formData.message_body}
+                    onChange={(e) => setFormData(prev => ({ ...prev, message_body: e.target.value }))}
+ 
