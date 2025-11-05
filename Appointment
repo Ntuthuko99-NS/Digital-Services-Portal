@@ -1,0 +1,82 @@
+{
+  "name": "Appointment",
+  "type": "object",
+  "properties": {
+    "application_id": {
+      "type": "string",
+      "description": "Related application ID if applicable"
+    },
+    "office_id": {
+      "type": "string",
+      "description": "Office where appointment is scheduled"
+    },
+    "appointment_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Date of appointment"
+    },
+    "appointment_time": {
+      "type": "string",
+      "description": "Time slot (e.g., 09:00)"
+    },
+    "service_type": {
+      "type": "string",
+      "description": "Type of service for appointment"
+    },
+    "citizen_name": {
+      "type": "string",
+      "description": "Name of citizen"
+    },
+    "citizen_phone": {
+      "type": "string",
+      "description": "Contact phone"
+    },
+    "citizen_email": {
+      "type": "string",
+      "description": "Contact email"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "scheduled",
+        "confirmed",
+        "checked_in",
+        "completed",
+        "cancelled",
+        "no_show"
+      ],
+      "default": "scheduled",
+      "description": "Appointment status"
+    },
+    "queue_number": {
+      "type": "string",
+      "description": "Queue number if walk-in"
+    },
+    "is_walk_in": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether this is a walk-in"
+    },
+    "check_in_time": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Time citizen checked in"
+    },
+    "completion_time": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Time service was completed"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Additional notes"
+    },
+    "cancellation_reason": {
+      "type": "string",
+      "description": "Reason for cancellation"
+    },
+    "reminder_sent": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether reminder was sent"
+ 
