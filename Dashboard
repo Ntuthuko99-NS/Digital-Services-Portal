@@ -1,0 +1,229 @@
+import React, { useState, useEffect } from "react";
+import { base44 } from "@/api/base44Client";
+import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
+import { createPageUrl } from "@/utils";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { 
+  FileText, Calendar, MessageSquare, Bell, ArrowRight, 
+  Clock, CheckCircle, XCircle, AlertCircle, TrendingUp 
+} from "lucide-react";
+import { format } from "date-fns";
+
+const STATUS_CONFIG = {
+  submitted: { label: "Submitted", color: "bg-blue-100 text-blue-700", icon: Clock },
+  under_review: { label: "Under Review", color: "bg-yellow-100 text-yellow-700", icon: Clock },
+  documents_pending: { label: "Documents Pending", color: "bg-orange-100 text-orange-700", icon: AlertCircle },
+  documents_verified: { label: "Documents Verified", color: "bg-purple-100 text-purple-700", icon: CheckCircle },
+  approved: { label: "Approved", color: "bg-green-100 text-green-700", icon: CheckCircle },
+  rejected: { label: "Rejected", color: "bg-red-100 text-red-700", icon: XCircle },
+};
+
+const SERVICE_LABELS = {
+  id_card: "ID Card",
+  passport: "Passport",
+  drivers_license: "Driver's License",
+  birth_certificate: "Birth Certificate",
+  marriage_certificate: "Marriage Certificate",
+  death_certificate: "Death Certificate",
+  sassa_grant: "SASSA Grant",
+  nsfas: "NSFAS",
+  rdp_housing: "RDP Housing",
+  business_registration: "Business Registration",
+  tax_registration: "Tax Registration",
+  voter_registration: "Voter Registration",
+};
+
+export default function Dashboard() {
+  const navigate = useNavigate();
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    checkProfileAndLoadUser();
+  }, []);
+
+  const checkProfileAndLoadUser = async () => {
+    try {
+      const userData = await base44.auth.me();
+      
+      // Redirect to profile completion if not completed
+      if (!userData.profile_completed) {
+        navigate(createPageUrl("ProfileCompletion"));
+        return;
+      }
+      
+      setUser(userData);
+    } catch (error) {
+      console.error("Error loading user:", error);
+    }
+    setLoading(false);
+  };
+
+  const { data: applications = [] } = useQuery({
+    queryKey: ['my-applications'],
+    queryFn: async () => {
+      const user = await base44.auth.me();
+      return base44.entities.Application.filter({ created_by: user.email }, '-created_date', 10);
+    },
+    enabled: !!user,
+    initialData: [],
+  });
+
+  const { data: upcomingAppointments = [] } = useQuery({
+    queryKey: ['upcoming-appointments'],
+    queryFn: async () => {
+      const user = await base44.auth.me();
+      const today = new Date().toISOString().split('T')[0];
+      const allAppointments = await base44.entities.Appointment.filter({ 
+        created_by: user.email, 
+        status: 'scheduled'
+      }, 'appointment_date', 5);
+      return allAppointments.filter(app => app.appointment_date >= today);
+    },
+    enabled: !!user,
+    initialData: [],
+  });
+
+  const { data: unreadNotifications = [] } = useQuery({
+    queryKey: ['unread-notifications'],
+    queryFn: async () => {
+      const user = await base44.auth.me();
+      return base44.entities.Notification.filter({ 
+        user_email: user.email, 
+        is_read: false 
+      }, '-created_date', 5);
+    },
+    enabled: !!user,
+    initialData: [],
+  });
+
+  const { data: unreadMessages = [] } = useQuery({
+    queryKey: ['unread-messages'],
+    queryFn: async () => {
+      const user = await base44.auth.me();
+      return base44.entities.Message.filter({ 
+        recipient_email: user.email, 
+        status: 'unread'
+      }, '-created_date', 5);
+    },
+    enabled: !!user,
+    initialData: [],
+  });
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin h-12 w-12 border-4 border-[#007749] border-t-transparent rounded-full mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading your dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
+  const stats = {
+    applications: applications.length,
+    pending: applications.filter(a => ['submitted', 'under_review'].includes(a.status)).length,
+    approved: applications.filter(a => a.status === 'approved').length,
+    appointments: upcomingAppointments.length,
+  };
+
+  return (
+    <div className="p-4 md:p-8 bg-[#FAFAF9] min-h-screen">
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="mb-8">
+          <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-2">
+            Welcome back, {user?.full_name?.split(' ')[0] || 'Citizen'}!
+          </h1>
+          <p className="text-gray-600">Here's what's happening with your government services</p>
+        </div>
+
+        {/* Stats Grid - Bento Style */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-8">
+          <Card className="relative overflow-hidden bg-gradient-to-br from-[#007749] to-[#005a38] text-white border-none shadow-lg hover:shadow-xl transition-all">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16"></div>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-white/80">Total Applications</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-4xl font-bold mb-1">{stats.applications}</div>
+              <div className="flex items-center gap-1 text-xs text-white/80">
+                <TrendingUp className="w-3 h-3" />
+                All time
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="relative overflow-hidden bg-gradient-to-br from-[#FFB81C] to-[#e5a318] text-white border-none shadow-lg hover:shadow-xl transition-all">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16"></div>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-white/90">Pending Review</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-4xl font-bold mb-1">{stats.pending}</div>
+              <div className="flex items-center gap-1 text-xs text-white/90">
+                <Clock className="w-3 h-3" />
+                In progress
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="relative overflow-hidden bg-gradient-to-br from-[#E03C31] to-[#c92e24] text-white border-none shadow-lg hover:shadow-xl transition-all">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16"></div>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-white/90">Approved</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-4xl font-bold mb-1">{stats.approved}</div>
+              <div className="flex items-center gap-1 text-xs text-white/90">
+                <CheckCircle className="w-3 h-3" />
+                Completed
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="relative overflow-hidden bg-gradient-to-br from-[#001489] to-[#000d6b] text-white border-none shadow-lg hover:shadow-xl transition-all">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16"></div>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-white/90">Appointments</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-4xl font-bold mb-1">{stats.appointments}</div>
+              <div className="flex items-center gap-1 text-xs text-white/90">
+                <Calendar className="w-3 h-3" />
+                Upcoming
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Main Content Grid */}
+        <div className="grid lg:grid-cols-3 gap-6">
+          {/* Recent Applications - Takes 2 columns */}
+          <Card className="lg:col-span-2 shadow-md border-none">
+            <CardHeader className="border-b bg-white/50">
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-[#007749]" />
+                  Recent Applications
+                </CardTitle>
+                <Button 
+                  variant="ghost" 
+                  size="sm"
+                  onClick={() => navigate(createPageUrl("MyApplications"))}
+                  className="gap-1 text-[#007749] hover:text-[#005a38] hover:bg-[#007749]/5"
+                >
+                  View All
+                  <ArrowRight className="w-4 h-4" />
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="p-6">
+              {applications.length === 0 ? (
+                <div className="text-center py-12">
+                  <FileText className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+ 
