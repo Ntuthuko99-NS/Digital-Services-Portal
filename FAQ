@@ -1,0 +1,82 @@
+{
+  "name": "FAQ",
+  "type": "object",
+  "properties": {
+    "category": {
+      "type": "string",
+      "enum": [
+        "general",
+        "applications",
+        "documents",
+        "appointments",
+        "payments",
+        "account",
+        "technical",
+        "id_services",
+        "social_services",
+        "business_services"
+      ],
+      "description": "FAQ category"
+    },
+    "question": {
+      "type": "string",
+      "description": "Question text"
+    },
+    "answer": {
+      "type": "string",
+      "description": "Answer text"
+    },
+    "language": {
+      "type": "string",
+      "enum": [
+        "english",
+        "afrikaans",
+        "zulu",
+        "xhosa",
+        "sotho",
+        "tswana",
+        "pedi",
+        "venda",
+        "tsonga",
+        "swati",
+        "ndebele"
+      ],
+      "default": "english",
+      "description": "Language of FAQ"
+    },
+    "related_service": {
+      "type": "string",
+      "description": "Related service type if applicable"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether FAQ is active"
+    },
+    "view_count": {
+      "type": "number",
+      "default": 0,
+      "description": "Number of times viewed"
+    },
+    "helpful_count": {
+      "type": "number",
+      "default": 0,
+      "description": "Number of times marked as helpful"
+    },
+    "not_helpful_count": {
+      "type": "number",
+      "default": 0,
+      "description": "Number of times marked as not helpful"
+    },
+    "keywords": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Keywords for search"
+    }
+  },
+  "required": [
+    "category",
+    "question",
+ 
