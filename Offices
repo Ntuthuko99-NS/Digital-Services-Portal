@@ -1,0 +1,229 @@
+import React, { useState } from "react";
+import { base44 } from "@/api/base44Client";
+import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
+import { createPageUrl } from "@/utils";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { MapPin, Phone, Mail, Clock, Users, Calendar, Navigation } from "lucide-react";
+
+const PROVINCES = [
+  "all", "gauteng", "western_cape", "eastern_cape", "kwazulu_natal",
+  "free_state", "limpopo", "mpumalanga", "north_west", "northern_cape"
+];
+
+export default function Offices() {
+  const navigate = useNavigate();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [provinceFilter, setProvinceFilter] = useState("all");
+  const [serviceFilter, setServiceFilter] = useState("all");
+
+  const { data: offices = [], isLoading } = useQuery({
+    queryKey: ['offices'],
+    queryFn: () => base44.entities.Office.filter({ is_active: true }),
+    initialData: [],
+  });
+
+  const filteredOffices = offices.filter(office => {
+    const matchesSearch = 
+      office.office_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      office.city?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      office.address?.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    const matchesProvince = provinceFilter === "all" || office.province === provinceFilter;
+    
+    const matchesService = serviceFilter === "all" || 
+      office.services_offered?.includes(serviceFilter);
+    
+    return matchesSearch && matchesProvince && matchesService;
+  });
+
+  const getQueueStatus = (queueLength) => {
+    if (queueLength < 10) return { label: "Low", color: "bg-green-100 text-green-700" };
+    if (queueLength < 20) return { label: "Medium", color: "bg-yellow-100 text-yellow-700" };
+    return { label: "High", color: "bg-red-100 text-red-700" };
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin h-12 w-12 border-4 border-[#007749] border-t-transparent rounded-full"></div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-4 md:p-8 bg-[#FAFAF9] min-h-screen">
+      <div className="max-w-7xl mx-auto">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Government Offices</h1>
+          <p className="text-gray-600">Find service centers near you</p>
+        </div>
+
+        {/* Filters */}
+        <Card className="mb-6 border-none shadow-md">
+          <CardContent className="p-6">
+            <div className="grid md:grid-cols-3 gap-4">
+              <Input
+                placeholder="Search by name, city, or address..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              
+              <Select value={provinceFilter} onValueChange={setProvinceFilter}>
+                <SelectTrigger>
+                  <SelectValue placeholder="All Provinces" />
+                </SelectTrigger>
+                <SelectContent>
+                  {PROVINCES.map(prov => (
+                    <SelectItem key={prov} value={prov}>
+                      {prov === 'all' ? 'All Provinces' : prov.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              
+              <Select value={serviceFilter} onValueChange={setServiceFilter}>
+                <SelectTrigger>
+                  <SelectValue placeholder="All Services" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Services</SelectItem>
+                  <SelectItem value="id_card">ID Card</SelectItem>
+                  <SelectItem value="passport">Passport</SelectItem>
+                  <SelectItem value="drivers_license">Driver's License</SelectItem>
+                  <SelectItem value="sassa_grant">SASSA Grant</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Offices Grid */}
+        {filteredOffices.length === 0 ? (
+          <Card className="border-none shadow-md">
+            <CardContent className="p-12 text-center">
+              <MapPin className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">No offices found</h3>
+              <p className="text-gray-600">Try adjusting your search or filters</p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredOffices.map((office) => {
+              const queueStatus = getQueueStatus(office.current_queue_length || 0);
+              
+              return (
+                <Card key={office.id} className="border-none shadow-md hover:shadow-xl transition-all">
+                  <CardHeader className="bg-gradient-to-br from-[#007749]/5 to-[#FFB81C]/5 border-b">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <CardTitle className="text-lg mb-1">{office.office_name}</CardTitle>
+                        <Badge variant="outline" className="capitalize">
+                          {office.office_type?.replace(/_/g, ' ')}
+                        </Badge>
+                      </div>
+                      <div className="w-10 h-10 rounded-lg bg-white shadow-sm flex items-center justify-center">
+                        <MapPin className="w-5 h-5 text-[#007749]" />
+                      </div>
+                    </div>
+                  </CardHeader>
+                  
+                  <CardContent className="p-6 space-y-4">
+                    {/* Location */}
+                    <div className="flex items-start gap-2">
+                      <MapPin className="w-4 h-4 text-gray-400 mt-0.5" />
+                      <div className="text-sm">
+                        <p className="font-medium text-gray-900">{office.address}</p>
+                        <p className="text-gray-600 capitalize">{office.city}, {office.province?.replace(/_/g, ' ')}</p>
+                      </div>
+                    </div>
+
+                    {/* Contact */}
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 text-sm">
+                        <Phone className="w-4 h-4 text-gray-400" />
+                        <a href={`tel:${office.phone}`} className="text-[#007749] hover:underline">
+                          {office.phone}
+                        </a>
+                      </div>
+                      {office.email && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <Mail className="w-4 h-4 text-gray-400" />
+                          <a href={`mailto:${office.email}`} className="text-[#007749] hover:underline truncate">
+                            {office.email}
+                          </a>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Queue Status */}
+                    <div className="pt-4 border-t space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-sm text-gray-600">
+                          <Users className="w-4 h-4" />
+                          Current Queue
+                        </div>
+                        <Badge className={`${queueStatus.color} border-0`}>
+                          {office.current_queue_length || 0} • {queueStatus.label}
+                        </Badge>
+                      </div>
+                      
+                      <div className="flex items-center justify-between text-sm">
+                        <div className="flex items-center gap-2 text-gray-600">
+                          <Clock className="w-4 h-4" />
+                          Avg. Wait
+                        </div>
+                        <span className="font-medium text-gray-900">
+                          ~{office.average_wait_time || 0} min
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between text-sm">
+                        <div className="flex items-center gap-2 text-gray-600">
+                          <Calendar className="w-4 h-4" />
+                          Slots Available
+                        </div>
+                        <span className="font-medium text-gray-900">
+                          {office.appointment_slots_available || 0}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="pt-4 border-t grid grid-cols-2 gap-2">
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => {
+                          if (office.latitude && office.longitude) {
+                            window.open(`https://www.google.com/maps/search/?api=1&query=${office.latitude},${office.longitude}`, '_blank');
+                          }
+                        }}
+                        className="gap-1"
+                      >
+                        <Navigation className="w-3 h-3" />
+                        Directions
+                      </Button>
+                      <Button 
+                        size="sm"
+                        className="bg-[#007749] hover:bg-[#005a38] gap-1"
+                        onClick={() => navigate(createPageUrl("Appointments"))}
+                      >
+                        <Calendar className="w-3 h-3" />
+                        Book
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
