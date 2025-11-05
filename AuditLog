@@ -1,0 +1,82 @@
+{
+  "name": "AuditLog",
+  "type": "object",
+  "properties": {
+    "entity_type": {
+      "type": "string",
+      "enum": [
+        "application",
+        "document",
+        "appointment",
+        "message",
+        "user",
+        "office"
+      ],
+      "description": "Type of entity affected"
+    },
+    "entity_id": {
+      "type": "string",
+      "description": "ID of affected entity"
+    },
+    "action": {
+      "type": "string",
+      "enum": [
+        "created",
+        "updated",
+        "deleted",
+        "status_changed",
+        "assigned",
+        "approved",
+        "rejected",
+        "submitted",
+        "verified",
+        "cancelled"
+      ],
+      "description": "Action performed"
+    },
+    "user_email": {
+      "type": "string",
+      "description": "Email of user who performed action"
+    },
+    "user_role": {
+      "type": "string",
+      "enum": [
+        "citizen",
+        "support_agent",
+        "agency_official",
+        "admin"
+      ],
+      "description": "Role of user"
+    },
+    "description": {
+      "type": "string",
+      "description": "Description of what happened"
+    },
+    "old_values": {
+      "type": "object",
+      "description": "Previous values before change",
+      "additionalProperties": true
+    },
+    "new_values": {
+      "type": "object",
+      "description": "New values after change",
+      "additionalProperties": true
+    },
+    "ip_address": {
+      "type": "string",
+      "description": "IP address of user"
+    },
+    "user_agent": {
+      "type": "string",
+      "description": "Browser/device information"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When action occurred"
+    }
+  },
+  "required": [
+    "entity_type",
+    "entity_id",
+ 
