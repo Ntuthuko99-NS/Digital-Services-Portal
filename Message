@@ -1,0 +1,82 @@
+{
+  "name": "Message",
+  "type": "object",
+  "properties": {
+    "application_id": {
+      "type": "string",
+      "description": "Related application ID if applicable"
+    },
+    "thread_id": {
+      "type": "string",
+      "description": "Conversation thread ID"
+    },
+    "subject": {
+      "type": "string",
+      "description": "Message subject"
+    },
+    "message_body": {
+      "type": "string",
+      "description": "Message content"
+    },
+    "sender_email": {
+      "type": "string",
+      "description": "Email of sender"
+    },
+    "sender_role": {
+      "type": "string",
+      "enum": [
+        "citizen",
+        "support_agent",
+        "agency_official",
+        "admin"
+      ],
+      "description": "Role of sender"
+    },
+    "recipient_email": {
+      "type": "string",
+      "description": "Email of recipient"
+    },
+    "recipient_role": {
+      "type": "string",
+      "enum": [
+        "citizen",
+        "support_agent",
+        "agency_official",
+        "admin"
+      ],
+      "description": "Role of recipient"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "unread",
+        "read",
+        "replied",
+        "closed"
+      ],
+      "default": "unread",
+      "description": "Message status"
+    },
+    "priority": {
+      "type": "string",
+      "enum": [
+        "low",
+        "medium",
+        "high",
+        "urgent"
+      ],
+      "default": "medium",
+      "description": "Message priority"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "application_inquiry",
+        "document_issue",
+        "appointment_related",
+        "payment_issue",
+        "technical_support",
+        "complaint",
+        "feedback",
+        "general"
+ 
