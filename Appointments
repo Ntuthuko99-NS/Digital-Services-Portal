@@ -1,0 +1,229 @@
+import React, { useState } from "react";
+import { base44 } from "@/api/base44Client";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
+import { Calendar, Clock, MapPin, Plus, X, CheckCircle } from "lucide-react";
+import { format } from "date-fns";
+import { toast } from "sonner";
+
+const STATUS_CONFIG = {
+  scheduled: { label: "Scheduled", color: "bg-blue-100 text-blue-700" },
+  confirmed: { label: "Confirmed", color: "bg-green-100 text-green-700" },
+  completed: { label: "Completed", color: "bg-gray-100 text-gray-700" },
+  cancelled: { label: "Cancelled", color: "bg-red-100 text-red-700" },
+};
+
+export default function Appointments() {
+  const queryClient = useQueryClient();
+  const [showBookDialog, setShowBookDialog] = useState(false);
+  const [user, setUser] = useState(null);
+  const [formData, setFormData] = useState({
+    office_id: "",
+    appointment_date: "",
+    appointment_time: "",
+    service_type: "",
+  });
+
+  React.useEffect(() => {
+    loadUser();
+  }, []);
+
+  const loadUser = async () => {
+    const userData = await base44.auth.me();
+    setUser(userData);
+  };
+
+  const { data: appointments = [], isLoading } = useQuery({
+    queryKey: ['my-appointments'],
+    queryFn: async () => {
+      const user = await base44.auth.me();
+      return base44.entities.Appointment.filter({ created_by: user.email }, '-appointment_date');
+    },
+    enabled: !!user,
+    initialData: [],
+  });
+
+  const { data: offices = [] } = useQuery({
+    queryKey: ['offices'],
+    queryFn: () => base44.entities.Office.filter({ is_active: true }),
+    initialData: [],
+  });
+
+  const bookAppointmentMutation = useMutation({
+    mutationFn: async (data) => {
+      const appointment = await base44.entities.Appointment.create({
+        ...data,
+        citizen_name: user.full_name,
+        citizen_phone: user.phone,
+        citizen_email: user.email,
+        status: 'scheduled',
+      });
+
+      // Create audit log
+      await base44.entities.AuditLog.create({
+        entity_type: 'appointment',
+        entity_id: appointment.id,
+        action: 'created',
+        user_email: user.email,
+        user_role: 'citizen',
+        description: `Appointment booked for ${data.service_type} on ${data.appointment_date}`,
+        timestamp: new Date().toISOString(),
+      });
+
+      // Create notification
+      await base44.entities.Notification.create({
+        user_email: user.email,
+        notification_type: 'appointment_scheduled',
+        title: 'Appointment Confirmed',
+        message: `Your appointment has been scheduled for ${format(new Date(data.appointment_date), 'MMMM d, yyyy')} at ${data.appointment_time}`,
+        related_id: appointment.id,
+        related_type: 'appointment',
+        channels: ['app', 'email'],
+        sent_date: new Date().toISOString(),
+      });
+
+      // Send email
+      const office = offices.find(o => o.id === data.office_id);
+      await base44.integrations.Core.SendEmail({
+        to: user.email,
+        subject: 'Appointment Confirmation',
+        body: `Dear ${user.full_name},\n\nYour appointment has been confirmed.\n\nDate: ${format(new Date(data.appointment_date), 'MMMM d, yyyy')}\nTime: ${data.appointment_time}\nService: ${data.service_type}\nOffice: ${office?.office_name}\nAddress: ${office?.address}\n\nPlease arrive 10 minutes early and bring all required documents.\n\nBest regards,\neGov SA Team`,
+      });
+
+      return appointment;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['my-appointments'] });
+      setShowBookDialog(false);
+      setFormData({ office_id: "", appointment_date: "", appointment_time: "", service_type: "" });
+      toast.success("Appointment booked successfully!");
+    },
+    onError: (error) => {
+      console.error("Error booking appointment:", error);
+      toast.error("Failed to book appointment");
+    },
+  });
+
+  const cancelAppointmentMutation = useMutation({
+    mutationFn: async (appointmentId) => {
+      const appointment = appointments.find(a => a.id === appointmentId);
+      
+      await base44.entities.Appointment.update(appointmentId, {
+        status: 'cancelled',
+        cancellation_reason: 'Cancelled by user',
+      });
+
+      // Create audit log
+      await base44.entities.AuditLog.create({
+        entity_type: 'appointment',
+        entity_id: appointmentId,
+        action: 'cancelled',
+        user_email: user.email,
+        user_role: 'citizen',
+        description: `Appointment cancelled for ${appointment.service_type}`,
+        timestamp: new Date().toISOString(),
+      });
+
+      // Create notification
+      await base44.entities.Notification.create({
+        user_email: user.email,
+        notification_type: 'appointment_cancelled',
+        title: 'Appointment Cancelled',
+        message: `Your appointment scheduled for ${format(new Date(appointment.appointment_date), 'MMMM d, yyyy')} has been cancelled.`,
+        related_id: appointmentId,
+        related_type: 'appointment',
+        channels: ['app', 'email'],
+        sent_date: new Date().toISOString(),
+      });
+
+      return appointmentId;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['my-appointments'] });
+      toast.success("Appointment cancelled");
+    },
+  });
+
+  const handleBookAppointment = () => {
+    if (!formData.office_id || !formData.appointment_date || !formData.appointment_time || !formData.service_type) {
+      toast.error("Please fill in all fields");
+      return;
+    }
+    bookAppointmentMutation.mutate(formData);
+  };
+
+  const upcomingAppointments = appointments.filter(a => 
+    a.status === 'scheduled' || a.status === 'confirmed'
+  );
+
+  const pastAppointments = appointments.filter(a => 
+    a.status === 'completed' || a.status === 'cancelled'
+  );
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin h-12 w-12 border-4 border-[#007749] border-t-transparent rounded-full"></div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-4 md:p-8 bg-[#FAFAF9] min-h-screen">
+      <div className="max-w-6xl mx-auto">
+        <div className="flex justify-between items-start mb-8">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">My Appointments</h1>
+            <p className="text-gray-600">Schedule and manage your office visits</p>
+          </div>
+          
+          <Dialog open={showBookDialog} onOpenChange={setShowBookDialog}>
+            <DialogTrigger asChild>
+              <Button className="bg-[#007749] hover:bg-[#005a38] gap-2">
+                <Plus className="w-4 h-4" />
+                Book Appointment
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Book New Appointment</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 mt-4">
+                <div className="space-y-2">
+                  <Label>Select Office</Label>
+                  <Select value={formData.office_id} onValueChange={(value) => setFormData(prev => ({ ...prev, office_id: value }))}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Choose office" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {offices.map(office => (
+                        <SelectItem key={office.id} value={office.id}>
+                          {office.office_name} - {office.city}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Service Type</Label>
+                  <Input
+                    placeholder="e.g., ID Card, Passport"
+                    value={formData.service_type}
+                    onChange={(e) => setFormData(prev => ({ ...prev, service_type: e.target.value }))}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Date</Label>
+                    <Input
+                      type="date"
+                      min={new Date().toISOString().split('T')[0]}
+ 
